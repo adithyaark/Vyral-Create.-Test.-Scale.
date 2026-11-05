@@ -1,0 +1,26 @@
+[project]
+name = "vyral"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.162.0",
+    "faster-whisper>=1.2.1",
+    "httpx>=0.28.1",
+    "kokoro-onnx>=0.6.1",
+    "pillow>=13.0.0",
+    "pillow-heif>=1.8.1",
+    "python-multipart>=0.0.33",
+    "rembg>=2.0.86",
+    "soundfile>=0.14.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
