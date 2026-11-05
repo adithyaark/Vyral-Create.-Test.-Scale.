@@ -100,8 +100,8 @@ async function renderHome() {
   const missing = Object.keys(labels).filter((key) => !status[key]);
   view.replaceChildren(
     h("h1", {}, "Your ad projects"),
-    h("p", { class: "sub" }, "Turn one product and your phone footage into captioned vertical ad variations."),
-    missing.length ? h("div", { class: "notice" }, `Missing: ${missing.map((key) => labels[key]).join(", ")}. See the README.`) : null,
+    h("p", { class: "sub" }, "Turn one product and your photos or phone footage into captioned vertical ad variations."),
+    missing.length ? h("div", { class: "notice" }, `Missing: ${missing.map((key) => labels[key]).join(", ")}. See the README.`) : "",
     h("div", { class: "card" },
       h("form", { class: "row", onsubmit: create },
         h("div", { style: "flex:1;min-width:220px" }, nameInput),
