@@ -1,5 +1,6 @@
 """Start Vyral with `python -m vyral` and open it in the browser."""
 import argparse
+import os
 import threading
 import webbrowser
 
@@ -22,7 +23,9 @@ def main() -> None:
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, [url]).start()
     print(f"Vyral is running at {url}. Press Ctrl+C to stop.")
-    uvicorn.run("vyral.app:app", host="127.0.0.1", port=args.port, log_level="warning")
+    # Stays private to this computer unless a server setup explicitly opens it up.
+    bind_host = os.environ.get("VYRAL_BIND_HOST", "127.0.0.1")
+    uvicorn.run("vyral.app:app", host=bind_host, port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,8 @@ ENTRANCE_SECONDS = 0.28
 FONT_PATHS = [
     r"C:\Windows\Fonts\seguibl.ttf",
     r"C:\Windows\Fonts\arialbd.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 ]
 
 

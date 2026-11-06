@@ -1,0 +1,36 @@
+# Builds the server image on the same kind of ARM machine as Oracle's free servers,
+# then renders a test video inside it. It needs no secrets.
+name: Server image
+
+on:
+  push:
+    branches: [main, "deploy/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t vyral .
+
+      - name: Render a test video inside the image
+        run: docker run --rm -e VYRAL_HOSTED=0 vyral .venv/bin/python scripts/smoke_test.py
+
+      - name: Check the app starts and is healthy
+        run: |
+          docker run -d --name vyral -e VYRAL_HOSTED=0 vyral
+          for attempt in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' vyral)
+            echo "Health: $status"
+            [ "$status" = "healthy" ] && exit 0
+            sleep 5
+          done
+          docker logs vyral
+          exit 1

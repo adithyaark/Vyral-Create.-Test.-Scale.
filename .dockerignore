@@ -1,0 +1,11 @@
+.env
+.git
+.venv
+.claude
+.pytest_cache
+__pycache__
+*.pyc
+data
+models
+samples
+tests

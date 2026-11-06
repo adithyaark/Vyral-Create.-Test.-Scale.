@@ -42,6 +42,8 @@ Without `VYRAL_HOSTED=1`, Vyral stays single-user on your PC, with no sign-in an
 
 To run the isolation tests against a real project, set `VYRAL_TEST_SUPABASE=1` and run `uv run pytest tests/test_hosted_integration.py`. They create two temporary users and delete them afterwards.
 
+To put Vyral on a server, follow [DEPLOY.md](DEPLOY.md).
+
 ## Keeping API keys in a .env file
 
 Copy `.env.example` to `.env` and fill in your keys. Keys there override keys saved in Settings, and `.env` is ignored by Git. On a hosted server (`VYRAL_HOSTED=1`), keys must come from `.env` or the server's environment, and they can't be viewed or changed in the app.
