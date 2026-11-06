@@ -3,6 +3,11 @@
 const view = document.getElementById("view");
 const notice = document.getElementById("notice");
 const projectTitle = document.getElementById("project-title");
+const crumbSeparator = document.getElementById("crumb-separator");
+const projectNav = document.getElementById("project-nav");
+const stepsNav = document.getElementById("steps");
+const projectsLink = document.getElementById("projects-link");
+const settingsLink = document.getElementById("settings-link");
 const STEPS = ["Product", "Scripts", "Visuals", "Voice & render", "Videos"];
 const MAX_VARIANTS = 10;
 
@@ -30,6 +35,12 @@ async function api(path, options = {}) {
     init.headers = { "Content-Type": "application/json" };
   }
   const response = await fetch(path, init);
+  if (response.status === 401 && !path.startsWith("/api/auth/")) {
+    // The session ended, so go back to the sign-in screen.
+    state.me = { hosted: true, user: null };
+    renderSignIn();
+    throw new Error("Please sign in.");
+  }
   if (!response.ok) {
     let detail = `Request failed (${response.status})`;
     try {
@@ -85,9 +96,146 @@ const pid = () => state.project.id;
 let saveQueue = Promise.resolve();
 
 /* Home */
+/* Accounts */
+async function loadMe() {
+  state.me = await apiJson("/api/auth/me");
+  const signedOut = state.me.hosted && !state.me.user;
+  document.body.classList.toggle("signed-out", signedOut);
+  document.querySelector(".badge").hidden = state.me.hosted;
+  document.querySelector(".sidebar-foot").textContent = state.me.user ? state.me.user.email : "Ad studio on your PC";
+  return state.me;
+}
+
+function renderSignIn(mode = "signin", message = "") {
+  document.body.classList.add("signed-out");
+  state.project = null;
+  updateChrome("", "");
+  hideProjectNav();
+  const titles = { signin: "Sign in to Vyral", signup: "Create your account", forgot: "Reset your password", recovery: "Choose a new password" };
+  const email = h("input", { type: "email", autocomplete: "email", required: true });
+  const password = h("input", {
+    type: "password", required: true, minLength: mode === "signin" ? 1 : 8,
+    autocomplete: mode === "signin" ? "current-password" : "new-password",
+  });
+  const submit = h("button", { class: "btn primary", type: "submit" },
+    { signin: "Sign in", signup: "Create account", forgot: "Send reset link", recovery: "Save password" }[mode]);
+  const form = h("form", {
+    onsubmit: guarded(async (event) => {
+      event.preventDefault();
+      submit.disabled = true;
+      try {
+        if (mode === "signin") {
+          await apiJson("/api/auth/login", { method: "POST", json: { email: email.value, password: password.value } });
+          await loadMe();
+          location.hash = "";
+          await route();
+        } else if (mode === "signup") {
+          const result = await apiJson("/api/auth/signup", { method: "POST", json: { email: email.value, password: password.value } });
+          renderSignIn("signin", result.message);
+        } else if (mode === "forgot") {
+          const result = await apiJson("/api/auth/forgot", { method: "POST", json: { email: email.value } });
+          renderSignIn("signin", result.message);
+        } else {
+          await apiJson("/api/auth/password", { method: "POST", json: { password: password.value } });
+          await loadMe();
+          location.hash = "";
+          await route();
+        }
+      } finally {
+        submit.disabled = false;
+      }
+    }),
+  },
+  mode === "recovery" ? "" : h("label", { class: "field" }, "Email", email),
+  mode === "forgot" ? "" : h("label", { class: "field" }, mode === "signin" ? "Password" : "Password (at least 8 characters)", password),
+  submit);
+  const link = (text, next) => h("button", { class: "link-button", type: "button", onclick: () => { clearError(); renderSignIn(next); } }, text);
+  view.replaceChildren(h("div", { class: "auth-card card" },
+    h("h1", {}, titles[mode]),
+    h("p", { class: "sub" }, mode === "signup" ? "Your projects stay private to your account." : "Create. Test. Scale."),
+    message ? h("p", { class: "auth-message", role: "status" }, message) : "",
+    form,
+    h("div", { class: "auth-links" },
+      mode === "signin" ? link("Create an account", "signup") : "",
+      mode === "signin" ? link("Forgot your password?", "forgot") : "",
+      mode === "signup" || mode === "forgot" ? link("Back to sign in", "signin") : "")));
+}
+
+// Email links return with session details in the address, which are moved into secure cookies.
+async function handleEmailLink() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const clearAddress = () => history.replaceState(null, "", location.pathname);
+  if (params.get("error_code") || params.get("error")) {
+    clearAddress();
+    await loadMe();
+    if (!state.me.user) renderSignIn("signin", "That link has expired or was already used. Please request a new one.");
+    return true;
+  }
+  if (!params.get("access_token")) return false;
+  const tokens = { access_token: params.get("access_token"), refresh_token: params.get("refresh_token") || "" };
+  const type = params.get("type");
+  clearAddress();
+  await apiJson("/api/auth/session", { method: "POST", json: tokens });
+  await loadMe();
+  if (type === "recovery") renderSignIn("recovery");
+  else await route();
+  return true;
+}
+
+function accountCard(me) {
+  const { usage, limits } = me;
+  const deletePassword = h("input", { type: "password", autocomplete: "current-password", "aria-label": "Current password" });
+  const newPassword = h("input", { type: "password", autocomplete: "new-password", minLength: 8, "aria-label": "New password" });
+  const line = (label, used, total) => h("div", { class: "usage-line" },
+    h("div", { class: "row between" }, h("span", {}, label), h("span", { class: "small mono" }, `${used} of ${total}`)),
+    h("div", { class: "progress" }, h("div", { style: `width:${Math.min(100, total ? (used / total) * 100 : 100)}%` })));
+  return h("div", {},
+    h("div", { class: "card" }, h("h2", {}, "Account"),
+      h("div", { class: "row between" },
+        h("span", {}, me.user.email),
+        h("button", {
+          class: "btn",
+          onclick: guarded(async () => {
+            await apiJson("/api/auth/logout", { method: "POST" });
+            state.me = { hosted: true, user: null };
+            location.hash = "";
+            renderSignIn();
+          }),
+        }, "Sign out"))),
+    h("div", { class: "card" }, h("h2", {}, "This month's usage"),
+      line("Videos", usage.videos, limits.videos),
+      line("AI requests", usage.ai_requests, limits.ai_requests),
+      h("p", { class: "small", style: "margin:12px 0 0" }, `Up to ${limits.projects} projects, and ${limits.upload_mb} MB per uploaded file.`)),
+    h("div", { class: "card" }, h("h2", {}, "Change password"),
+      h("form", {
+        class: "row",
+        onsubmit: guarded(async (event) => {
+          event.preventDefault();
+          await apiJson("/api/auth/password", { method: "POST", json: { password: newPassword.value } });
+          newPassword.value = "";
+          await askConfirm("Your password has been changed.", "OK");
+        }),
+      }, h("div", { style: "flex:1;min-width:220px" }, newPassword), h("button", { class: "btn", type: "submit" }, "Save password"))),
+    h("div", { class: "card" }, h("h2", {}, "Delete account"),
+      h("p", { class: "small" }, "This permanently deletes your account, projects, photos, clips and videos. It can't be undone."),
+      h("form", {
+        class: "row",
+        onsubmit: guarded(async (event) => {
+          event.preventDefault();
+          if (!deletePassword.value) throw new Error("Enter your password to confirm.");
+          if (!await askConfirm("Delete your account and everything in it? This can't be undone.", "Delete account")) return;
+          await apiJson("/api/account", { method: "DELETE", json: { password: deletePassword.value } });
+          state.me = { hosted: true, user: null };
+          location.hash = "";
+          renderSignIn("signin", "Your account and data have been deleted.");
+        }),
+      }, h("div", { style: "flex:1;min-width:220px" }, deletePassword), h("button", { class: "btn danger", type: "submit" }, "Delete my account"))));
+}
+
 async function renderHome() {
   state.project = null;
-  projectTitle.textContent = "";
+  updateChrome("", "projects");
+  hideProjectNav();
   const [projects, status] = await Promise.all([apiJson("/api/projects"), apiJson("/api/status")]);
   const nameInput = h("input", { type: "text", placeholder: "Product name", "aria-label": "Product name", maxLength: 120 });
   const create = guarded(async (event) => {
@@ -116,14 +264,47 @@ async function renderHome() {
 
 /* Project shell */
 function renderProject() {
-  projectTitle.textContent = state.project.name;
-  const tabs = h("nav", { class: "steps", "aria-label": "Steps" }, STEPS.map((name, index) =>
+  updateChrome(state.project.name, "projects");
+  stepsNav.replaceChildren(...STEPS.map((name, index) =>
     h("button", {
-      class: `step${index === state.step ? " active" : ""}`,
+      class: `side-link${index === state.step ? " active" : ""}`,
+      "aria-current": index === state.step ? "step" : "false",
       onclick: () => { state.step = index; clearError(); renderProject(); },
-    }, h("span", { class: "num" }, `${index + 1}`), name)));
+    }, h("span", { class: "num" }, `0${index + 1}`), name)));
+  projectNav.hidden = false;
   const body = [stepProduct, stepScripts, stepVisuals, stepVoice, stepVideos][state.step]();
-  view.replaceChildren(tabs, jobBanner(), body);
+  view.replaceChildren(jobBanner(), body);
+}
+
+// Keeps the breadcrumb and highlighted navigation in step with the current page.
+function updateChrome(title, section) {
+  projectTitle.textContent = title;
+  crumbSeparator.hidden = !title;
+  projectsLink.classList.toggle("active", section === "projects");
+  settingsLink.classList.toggle("active", section === "settings");
+  if (section === "settings") settingsLink.setAttribute("aria-current", "page");
+  else settingsLink.removeAttribute("aria-current");
+}
+
+function hideProjectNav() {
+  projectNav.hidden = true;
+  stepsNav.replaceChildren();
+}
+
+function setUpThemeToggle() {
+  const toggle = document.getElementById("theme-toggle");
+  const show = () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    toggle.setAttribute("aria-label", `Switch to ${next} mode`);
+    toggle.title = `Switch to ${next} mode`;
+  };
+  toggle.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("vyral-theme", next); } catch { /* It still applies until the page reloads. */ }
+    show();
+  });
+  show();
 }
 
 function jobBanner() {
@@ -380,8 +561,14 @@ function otherAiPanel(open) {
 function writerNote() {
   const note = h("span", { class: "small" });
   apiJson("/api/settings").then((values) => {
+    if (values.hosted && values.has_groq_key === undefined) {
+      note.textContent = "Uses one of your monthly AI requests. ";
+      return;
+    }
     if (values.script_provider === "groq") {
       note.textContent = `Writes with Groq (${values.groq_model}). Product details are sent to Groq. `;
+    } else if (values.script_provider === "claude_api") {
+      note.textContent = `Writes with the Claude API (${values.anthropic_model}), which is billed to your API key. `;
     } else {
       note.textContent = `Writes with your Claude plan${values.has_groq_key && values.groq_fallback ? ", then Groq if the limit is reached" : ""}. `;
     }
@@ -390,10 +577,90 @@ function writerNote() {
   return note;
 }
 
+// Keys from the server's environment, or on any hosted server, can't be edited here.
+const keyIsManaged = (values, source) => values.hosted || source === "env";
+
+function anthropicCard(values, save) {
+  const managed = keyIsManaged(values, values.anthropic_key_source);
+  const keyInput = h("input", { type: "password", autocomplete: "off", placeholder: "sk-ant-...", "aria-label": "Anthropic API key" });
+  const saveKey = h("button", { class: "btn primary", type: "submit" }, "Save key");
+  const keyForm = h("form", {
+    class: "row",
+    onsubmit: guarded(async (event) => {
+      event.preventDefault();
+      if (!keyInput.value.trim()) throw new Error("Paste your Anthropic API key first.");
+      saveKey.disabled = true;
+      saveKey.textContent = "Checking key...";
+      try {
+        await apiJson("/api/settings/anthropic-key", { method: "PUT", json: { key: keyInput.value } });
+        keyInput.value = "";
+        await renderSettings();
+      } finally {
+        saveKey.disabled = false;
+        saveKey.textContent = "Save key";
+      }
+    }),
+  }, h("div", { style: "flex:1;min-width:240px" }, keyInput), saveKey);
+
+  const model = h("select", {
+    "aria-label": "Claude model",
+    onchange: (event) => save(() => ({ anthropic_model: event.target.value }))(),
+  },
+  h("option", { value: "claude-opus-5-5" }, "Opus 5.5 ($4 in / $20 out per million tokens)"),
+  h("option", { value: "claude-sonnet-5-5" }, "Sonnet 5.5 ($2 in / $10 out per million tokens)"),
+  h("option", { value: "claude-haiku-5-5" }, "Haiku 5.5 ($0.10 in / $0.50 out per million tokens)"));
+  model.value = values.anthropic_model;
+
+  const budget = h("input", {
+    type: "number", min: "0", step: "1", value: values.anthropic_monthly_budget_usd, "aria-label": "Monthly budget in US dollars",
+    onchange: (event) => {
+      const amount = Number(event.target.value);
+      if (!Number.isFinite(amount) || amount < 0) {
+        showError(new Error("Enter a budget of 0 or more."));
+        return;
+      }
+      save(() => ({ anthropic_monthly_budget_usd: amount }))();
+    },
+  });
+
+  return h("div", { class: "card" },
+    h("h2", {}, "Claude API"),
+    values.has_anthropic_key
+      ? h("div", { class: "row between key-status" },
+        h("span", { class: "check-ok" }, managed ? "Key set on the server" : `Key saved, ending in ${values.anthropic_key_hint}`),
+        managed ? null : h("button", {
+          class: "btn quiet",
+          onclick: guarded(async () => {
+            if (!await askConfirm("Remove your Anthropic API key from this PC?", "Remove key")) return;
+            await apiJson("/api/settings/anthropic-key", { method: "DELETE" });
+            await renderSettings();
+          }),
+        }, "Remove key"))
+      : managed
+        ? h("p", { class: "small" }, "Set ANTHROPIC_API_KEY in the server's environment to use the Claude API.")
+        : h("p", { class: "small" }, "Pay per use, separate from your Claude plan. Create a key at ",
+          h("a", { href: "https://console.anthropic.com/settings/keys", target: "_blank", rel: "noreferrer" }, "the Anthropic Console"),
+          ", then paste it here. Vyral tests it before saving."),
+    managed ? null : keyForm,
+    managed ? null : h("p", { class: "small", style: "margin:10px 0 0" }, "Your key is stored on this PC in data/settings.json, without encryption. You can use the .env file instead."),
+    h("label", { class: "field", style: "margin:14px 0 0" }, "Model", model),
+    h("label", { class: "field", style: "margin:14px 0 0" }, "Monthly budget (US dollars)",
+      h("span", { class: "hint" }, "Vyral stops Claude API requests once its estimate reaches this. Also set a limit in the Anthropic Console, because that's the real bill."), budget),
+    h("p", { class: "small", style: "margin:10px 0 0" },
+      `Estimated this month: $${values.anthropic_spent_usd.toFixed(2)} of $${values.anthropic_monthly_budget_usd.toFixed(2)}, from ${values.anthropic_requests} request${values.anthropic_requests === 1 ? "" : "s"}.`));
+}
+
 async function renderSettings() {
   state.project = null;
-  projectTitle.textContent = "";
+  updateChrome("Settings", "settings");
+  hideProjectNav();
+  const me = await loadMe();
+  if (me.hosted && !me.is_admin) {
+    view.replaceChildren(h("h1", {}, "Settings"), h("p", { class: "sub" }, "Manage your account."), accountCard(me));
+    return;
+  }
   const values = await apiJson("/api/settings");
+  const groqManaged = keyIsManaged(values, values.groq_key_source);
 
   const save = (changes) => guarded(async () => {
     const current = await apiJson("/api/settings");
@@ -412,7 +679,8 @@ async function renderSettings() {
   const provider = h("select", {
     "aria-label": "Script writer",
     onchange: (event) => save(() => ({ script_provider: event.target.value }))(),
-  }, h("option", { value: "claude" }, "Claude (uses your Claude plan)"),
+  }, values.hosted ? null : h("option", { value: "claude" }, "Claude plan (personal use only)"),
+  h("option", { value: "claude_api", disabled: !values.has_anthropic_key }, values.has_anthropic_key ? "Claude API (billed to your key)" : "Claude API (add a key first)"),
   h("option", { value: "groq", disabled: !values.has_groq_key }, values.has_groq_key ? "Groq" : "Groq (add a key first)"));
   provider.value = values.script_provider;
 
@@ -454,6 +722,7 @@ async function renderSettings() {
   view.replaceChildren(
     h("h1", {}, "Settings"),
     h("p", { class: "sub" }, "Choose which AI writes your brief, hooks and scripts."),
+    me.hosted ? accountCard(me) : "",
     h("div", { class: "card" },
       h("label", { class: "field" }, "Script writer", provider),
       h("label", { class: "check" },
@@ -461,14 +730,15 @@ async function renderSettings() {
           type: "checkbox", checked: values.groq_fallback, disabled: !values.has_groq_key,
           onchange: (event) => save(() => ({ groq_fallback: event.target.checked }))(),
         }),
-        "Use Groq automatically if Claude's limit is reached"),
-      h("p", { class: "small", style: "margin:10px 0 0" }, "Scene planning with photos still uses Claude. Without Claude, choose Plan automatically.")),
+        "Use Groq automatically if a Claude limit or budget is reached"),
+      h("p", { class: "small", style: "margin:10px 0 0" }, "Scene planning with photos uses your Claude API key if one is saved, otherwise your Claude plan. Without Claude, choose Plan automatically.")),
+    anthropicCard(values, save),
     h("div", { class: "card" },
       h("h2", {}, "Groq"),
       values.has_groq_key
         ? h("div", { class: "row between key-status" },
-          h("span", { class: "check-ok" }, `Key saved, ending in ${values.groq_key_hint}`),
-          h("button", {
+          h("span", { class: "check-ok" }, groqManaged ? "Key set on the server" : `Key saved, ending in ${values.groq_key_hint}`),
+          groqManaged ? null : h("button", {
             class: "btn quiet",
             onclick: guarded(async () => {
               if (!await askConfirm("Remove your Groq key from this PC? Vyral will go back to using Claude.", "Remove key")) return;
@@ -476,11 +746,13 @@ async function renderSettings() {
               await renderSettings();
             }),
           }, "Remove key"))
-        : h("p", { class: "small" }, "Create a free key at ",
-          h("a", { href: "https://console.groq.com/keys", target: "_blank", rel: "noreferrer" }, "console.groq.com/keys"),
-          ", then paste it here. Vyral tests it before saving."),
-      keyForm,
-      h("p", { class: "small", style: "margin:10px 0 0" }, "Your key is stored on this PC in data/settings.json, without encryption. It isn't added to your projects."),
+        : groqManaged
+          ? h("p", { class: "small" }, "Set GROQ_API_KEY in the server's environment to use Groq.")
+          : h("p", { class: "small" }, "Create a free key at ",
+            h("a", { href: "https://console.groq.com/keys", target: "_blank", rel: "noreferrer" }, "console.groq.com/keys"),
+            ", then paste it here. Vyral tests it before saving."),
+      groqManaged ? null : keyForm,
+      groqManaged ? null : h("p", { class: "small", style: "margin:10px 0 0" }, "Your key is stored on this PC in data/settings.json, without encryption. It isn't added to your projects. You can use the .env file instead."),
       values.has_groq_key ? h("label", { class: "field", style: "margin:14px 0 0" }, "Model", model) : null,
       h("p", { class: "small", style: "margin:12px 0 0" }, "When Groq writes, your product details and reviews are sent to Groq. Limits depend on your account. ",
         h("a", { href: "https://console.groq.com/docs/your-data", target: "_blank", rel: "noreferrer" }, "Groq's data policy"))),
@@ -541,7 +813,7 @@ function photoPanel(brandColor, saveVisuals) {
     }),
   });
   const colorInput = h("input", {
-    type: "color", value: brandColor || "#5a2be0", "aria-label": "Brand color",
+    type: "color", value: brandColor || "#f2703a", "aria-label": "Brand color",
     onchange: (event) => saveVisuals({ brand_color: event.target.value })(),
   });
   return h("div", {},
@@ -734,7 +1006,7 @@ function scenePanel(approvedHooks, approvedScripts) {
   return h("div", { class: "card" },
     h("div", { class: "row between" },
       h("div", {}, h("h2", {}, "Scene plan"),
-        h("p", { class: "small", style: "margin:0" }, `${planned.length} of ${items.length} approved hooks and scripts planned. "Plan scenes with Claude" sends your photos and lines to Claude, even if Groq writes your scripts.`)),
+        h("p", { class: "small", style: "margin:0" }, `${planned.length} of ${items.length} approved hooks and scripts planned. "Plan scenes with Claude" sends your photos and lines to Claude, using your API key if saved or otherwise your Claude plan.`)),
       h("div", { class: "row" },
         h("button", {
           class: "btn",
@@ -855,6 +1127,17 @@ function stepVideos() {
 /* Routing */
 async function route() {
   clearError();
+  try {
+    if (await handleEmailLink()) return;
+    if (!state.me) await loadMe();
+    if (state.me.hosted && !state.me.user) {
+      renderSignIn();
+      return;
+    }
+  } catch (error) {
+    showError(error);
+    return;
+  }
   const id = location.hash.slice(1);
   try {
     if (!id) { await renderHome(); return; }
@@ -874,4 +1157,5 @@ document.getElementById("home").addEventListener("click", (event) => {
   location.hash = "";
 });
 window.addEventListener("hashchange", route);
+setUpThemeToggle();
 route();
