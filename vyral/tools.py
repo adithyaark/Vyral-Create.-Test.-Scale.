@@ -16,6 +16,11 @@ KOKORO_MODEL = next(
 KOKORO_VOICES = MODELS / "voices-v1.0.bin"
 
 
+def is_hosted() -> bool:
+    """A hosted server serves many customers, with accounts and cloud storage."""
+    return os.environ.get("VYRAL_HOSTED", "").lower() in ("1", "true", "yes")
+
+
 def find_program(name: str) -> str | None:
     """Find a program on PATH, then in the folders installers commonly use.
 

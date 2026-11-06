@@ -1,24 +1,77 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vyral: Create. Test. Scale.</title>
+  <script>
+    // Runs before the page draws, so a saved light theme never flashes dark first.
+    try {
+      if (localStorage.getItem("vyral-theme") === "light") document.documentElement.dataset.theme = "light";
+    } catch { /* Storage can be blocked, and dark is a fine default. */ }
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#" id="home">
-      <span class="wordmark">Vyral</span>
-      <span class="tagline">Create. Test. Scale.</span>
-    </a>
-    <div class="topbar-right">
-      <span class="project-title" id="project-title"></span>
-      <a class="settings-link" href="#settings">Settings</a>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" id="home" aria-label="Vyral home">
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 3.5v17L20 12 6 3.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        </svg>
+        <span class="wordmark">VYRAL</span>
+        <span class="badge">LOCAL</span>
+      </a>
+      <p class="tagline">Create. Test. Scale.</p>
+
+      <p class="nav-label">Navigation</p>
+      <nav class="side-nav" aria-label="Main">
+        <a class="side-link" id="projects-link" href="#">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>
+          </svg>
+          Projects
+        </a>
+      </nav>
+
+      <div id="project-nav" class="project-nav" hidden>
+        <p class="nav-label">Workflow</p>
+        <nav id="steps" class="side-nav" aria-label="Project steps"></nav>
+      </div>
+
+      <p class="sidebar-foot">Ad studio on your PC</p>
+    </aside>
+
+    <div class="content">
+      <header class="topbar">
+        <div class="crumbs">
+          <a id="crumb-root" href="#">Projects</a>
+          <span id="crumb-separator" class="crumb-separator" aria-hidden="true" hidden>/</span>
+          <span id="project-title" class="project-title"></span>
+        </div>
+        <div class="topbar-actions">
+          <button id="theme-toggle" class="icon-button" type="button">
+            <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3 7 7M17 17l1.7 1.7M5.3 18.7 7 17M17 7l1.7-1.7"/>
+            </svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>
+            </svg>
+          </button>
+          <a id="settings-link" class="icon-button" href="#settings" aria-label="Settings" title="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h9M17 7h3M4 17h3M11 17h9"/>
+              <circle cx="15" cy="7" r="2"/>
+              <circle cx="9" cy="17" r="2"/>
+            </svg>
+          </a>
+        </div>
+      </header>
+      <div id="notice" class="notice" role="alert" hidden></div>
+      <main id="view"></main>
     </div>
-  </header>
-  <div id="notice" class="notice" role="alert" hidden></div>
-  <main id="view"></main>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>

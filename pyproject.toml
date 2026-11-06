@@ -3,12 +3,17 @@ name = "vyral"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=2.5.0",
     "fastapi>=0.162.0",
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
     "kokoro-onnx>=0.6.1",
     "pillow>=13.0.0",
     "pillow-heif>=1.8.1",
+    "psycopg-pool>=3.3.3",
+    "psycopg[binary]>=3.3.8",
+    "pyjwt[crypto]>=2.15.1",
+    "python-dotenv>=1.2.4",
     "python-multipart>=0.0.33",
     "rembg>=2.0.86",
     "soundfile>=0.14.0",

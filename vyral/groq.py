@@ -13,7 +13,7 @@ TIMEOUT_SECONDS = 120
 MAX_OUTPUT_TOKENS = 4000
 ATTEMPTS = 2
 # Audio and safety-filter models can't write scripts, so they aren't offered.
-NOT_FOR_WRITING = ("whisper", "orpheus", "guard", "safeguard", "tts")
+NOT_FOR_WRITING = ("whisper", "orpheus", "guard", "safeguard", "tts", "allam")
 
 
 def _client(key: str) -> httpx.Client:

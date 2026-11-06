@@ -12,7 +12,7 @@ from .tools import find_program
 
 TIMEOUT_SECONDS = 300
 
-SYSTEM_PROMPT = """You write short-form vertical video ad copy for small brands.
+COPY_RULES = """You write short-form vertical video ad copy for small brands.
 
 Honesty rules, which override any request to sell harder:
 - Use only facts found in the supplied product data. Never invent statistics, \
@@ -34,13 +34,15 @@ Writing rules:
 - Each hook is at most 14 words. Each script body is 40 to 70 words and does not \
 contain a hook. Each call to action is at most 12 words.
 - Write in English.
+- Write exactly 10 hooks and 3 to 5 scripts."""
+
+SYSTEM_PROMPT = COPY_RULES + """
 
 Reply with one JSON object and nothing else, in exactly this shape:
 {"brief": {"summary": "string", "pain_points": ["string"], "angles": ["string"], \
 "missing_info": ["string"]},
 "hooks": [{"text": "string", "angle": "string"}],
-"scripts": [{"angle": "string", "body": "string", "cta": "string", "flags": ["string"]}]}
-Write exactly 10 hooks and 3 to 5 scripts."""
+"scripts": [{"angle": "string", "body": "string", "cta": "string", "flags": ["string"]}]}"""
 
 
 LIMIT_PATTERN = re.compile(r"(usage|rate|session|weekly|hit your|reached).{0,40}limit|limit.{0,40}(reached|reset)", re.I | re.S)
